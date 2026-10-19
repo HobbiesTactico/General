@@ -164,6 +164,11 @@ body.pv .bk{display:inline-flex;align-items:center;gap:4px;margin-bottom:10px}
 .cvf img{width:100%;height:100%;object-fit:cover;display:block;user-select:none;-webkit-user-drag:none;pointer-events:none}
 .cvf.no{display:grid;place-items:center;color:var(--mut);font-size:.8rem;cursor:default;text-align:center;padding:10px;touch-action:auto}
 .cvh{display:flex;flex-direction:column;gap:8px;align-items:flex-start;color:var(--mut);font-size:.82rem;flex:1;min-width:140px}
+/* referencia: "Ref." dorado + numero, un poco menor que el titulo pero bien visible */
+.rf{font-size:.9rem;font-weight:600;color:var(--ink);margin-top:3px;min-height:1.3em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rf b{color:var(--gold);font-weight:800;margin-right:5px}
+.refh{font-size:1.25rem;margin:-2px 0 0;color:var(--mut)}.refh b{color:var(--gold);font-weight:800;margin-right:8px}.refh span{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--ink)}
+@media(max-width:860px){#grid .rf{font-size:.82rem}.refh{font-size:1.1rem}}
 </style></head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="igg" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#FEDA75"/><stop offset=".25" stop-color="#FA7E1E"/><stop offset=".5" stop-color="#D62976"/><stop offset=".75" stop-color="#962FBF"/><stop offset="1" stop-color="#4F5BD5"/></linearGradient></defs></svg>
@@ -198,7 +203,7 @@ body.pv .bk{display:inline-flex;align-items:center;gap:4px;margin-bottom:10px}
       <div id="stats" class="stats"></div>
       <div class="bar" style="margin-top:0">
         <div class="sw"><span id="ico2"></span><input id="aq" type="search" placeholder="Buscar en inventario"></div>
-        <select id="ac"></select>
+        <select id="ac"></select><select id="as"><option value="n">Orden: más nuevos</option><option value="ra">Referencia: menor a mayor</option><option value="rd">Referencia: mayor a menor</option></select>
         <div id="af" class="tg"></div>
         <button class="btn gh" data-a="importar">Importar Excel</button><button class="btn" data-a="nuevo">+ Nuevo producto</button>
       </div>
@@ -218,8 +223,9 @@ body.pv .bk{display:inline-flex;align-items:center;gap:4px;margin-bottom:10px}
   <h2 id="dt">Nuevo producto</h2>
   <div class="fg">
     <div class="s2"><label>Nombre</label><input id="pn" type="text" required></div>
+    <div><label>Referencia</label><input id="prf" type="text" placeholder="MG57533"></div>
     <div><label>Categoría</label><select id="pc" style="width:100%"></select></div>
-    <div><label>Etiquetas (separadas por coma)</label><input id="pe" type="text" placeholder="nuevo, oferta"></div>
+    <div class="s2"><label>Etiquetas (separadas por coma)</label><input id="pe" type="text" placeholder="nuevo, oferta"></div>
     <div><label>Precio (COP)</label><input id="pp" type="number" min="0" step="1" required></div>
     <div><label>Stock</label><div class="stp"><button type="button" data-a="sd" data-d="-1">-</button><input id="ps" type="number" min="0" value="0"><button type="button" data-a="sd" data-d="1">+</button></div></div>
     <div class="s2"><label>Descripción corta</label><textarea id="pd" rows="2"></textarea></div>
@@ -228,6 +234,7 @@ body.pv .bk{display:inline-flex;align-items:center;gap:4px;margin-bottom:10px}
     <div class="s2"><label class="sw2"><input id="pa" type="checkbox" checked> Visible en el catálogo</label></div>
     <div class="s2"><label class="sw2"><input id="pxm" type="checkbox"> Marcar como “Próximamente” (cartel sobre la foto)</label></div>
     <div class="s2"><label>Encuadre de la portada (arrastra la foto)</label><div class="cvw"><div id="cvf" class="cvf no">Agrega una foto para encuadrar la portada</div><div class="cvh"><span>Así se recorta en la cuadrícula del catálogo.</span><button type="button" class="btn gh sm" data-a="cvreset">Centrar</button></div></div></div>
+    <div id="extr" class="s2 imh hidden" style="color:var(--bad)">Para guardar la “Referencia” ejecuta migracion_referencia_1.sql en Supabase (SQL Editor).</div>
     <div id="extn" class="s2 imh hidden" style="color:var(--bad)">Para usar “Próximamente” y el encuadre, ejecuta migracion_estado.sql en Supabase (SQL Editor).</div>
   </div>
   <div class="acts"><button class="btn" id="psv">Guardar</button><button type="button" class="btn gh" data-a="closeDrawer">Cancelar</button><button type="button" class="btn dg hidden" id="pdel" data-a="delEdit" style="margin-left:auto">Eliminar</button></div>
@@ -292,13 +299,17 @@ const bandHTML=p=>{const k=pstate(p);return k?`<div class="bn ${k}">${k==='prx'?
 const stInfo=p=>p.proximamente?['px','Próximamente']:p.stock>0?['ok',`Disponible: ${p.stock} und.`]:['no','Agotado'];
 function setBand(card,p){const th=card.querySelector('.th'),e=th.querySelector('.bn');if(e)e.remove();card.classList.remove('prx','out');const k=pstate(p);if(k){card.classList.add(k);th.insertAdjacentHTML('beforeend',bandHTML(p))}}
 const hasExt=()=>!prods.length||('proximamente' in prods[0]);
+const hasRef=()=>!prods.length||('referencia' in prods[0]);
+const refLine=p=>`<div class="rf">${p.referencia?`<b>Ref.</b>${esc(p.referencia)}`:''}</div>`;
+const refNum=p=>{const m=String(p.referencia||'').match(/(\d+)(?!.*\d)/);return m?+m[1]:null};
+const cmpRef=d=>(a,b)=>{const x=refNum(a),y=refNum(b);if(x===y)return 0;if(x==null)return 1;if(y==null)return -1;return d*(x-y)};
 const abadge=p=>!p.activo?['bd h','Oculto']:p.stock>0&&p.stock<=LOW?['bd l','Stock bajo']:null;
 const bhtml=b=>b?`<span class="${b[0]}">${b[1]}</span>`:'';
 const thumb=p=>pics(p)[0]?`<img src="${esc(pics(p)[0])}" alt="" loading="lazy" style="object-position:${p.portada_x??50}% ${p.portada_y??50}%">`:ph;
-const pcard=p=>`<article class="c ${pstate(p)}" data-a="pick" data-id="${p.id}"><div class="th">${thumb(p)}${bandHTML(p)}${bhtml(pbadge(p))}</div><div class="tx"><div class="tn">${esc(p.nombre)}</div><div class="tc">${esc(catName(p.categoria_id)||'')}</div><div class="tp">${money(p.precio)}</div></div></article>`;
+const pcard=p=>`<article class="c ${pstate(p)}" data-a="pick" data-id="${p.id}"><div class="th">${thumb(p)}${bandHTML(p)}${bhtml(pbadge(p))}</div><div class="tx"><div class="tn">${esc(p.nombre)}</div>${refLine(p)}<div class="tp">${money(p.precio)}</div></div></article>`;
 function items(){
   const t=q.trim().toLowerCase();
-  const l=prods.filter(p=>p.activo&&(fCat===null||p.categoria_id===fCat)&&[...fTags].every(x=>(p.etiquetas||[]).includes(x))&&(!t||(p.nombre+' '+(p.descripcion||'')+' '+(p.etiquetas||[]).join(' ')).toLowerCase().includes(t)));
+  const l=prods.filter(p=>p.activo&&(fCat===null||p.categoria_id===fCat)&&[...fTags].every(x=>(p.etiquetas||[]).includes(x))&&(!t||(p.nombre+' '+(p.referencia||'')+' '+(p.descripcion||'')+' '+(p.etiquetas||[]).join(' ')).toLowerCase().includes(t)));
   if(sort==='pa')l.sort((a,b)=>a.precio-b.precio);if(sort==='pd')l.sort((a,b)=>b.precio-a.precio);return l;
 }
 function render(){
@@ -317,9 +328,9 @@ function setPV(on){const was=document.body.classList.contains('pv');if(on===was)
 addEventListener('popstate',()=>{const m=location.hash.match(/^#p(\d+)$/);if(m)sel=+m[1];setPV(!!m&&isMob());render()});
 let nextDir=null,heroTok=0;
 const heroHTML=p=>{
-  const c=catName(p.categoria_id),g=pics(p),f=fpics(p);
+  const g=pics(p),f=fpics(p);
   const arr=(a,t)=>`<button class="nv l" data-a="${a}" data-d="-1" aria-label="${t} anterior">${CH.l}</button><button class="nv r" data-a="${a}" data-d="1" aria-label="${t} siguiente">${CH.r}</button>`;
-  return `<div class="hero ${pstate(p)}"><div class="gl"><div class="pho" data-sw="g">${bandHTML(p)}${g[0]?`<img class="mi" id="mi" data-a="zoom" src="${esc(g[0])}" alt="${esc(p.nombre)}">`:ph}${g.length>1?arr('img','Foto')+`<span class="gc" id="gc">1 / ${g.length}</span><div class="gd" id="gd">${g.map((_,i)=>`<i class="${i?'':'on'}"></i>`).join('')}</div>`:''}</div>${g.length>1?`<div class="ths">${g.map((u,i)=>`<img class="${i?'':'on'}" src="${esc(u)}" data-a="gal" data-i="${i}" alt="">`).join('')}</div>`:''}</div><div class="inf">${c?`<span class="pill">${esc(c)}</span>`:''}<h1>${esc(p.nombre)}</h1><div class="pr"><b>${money(p.precio)}</b><span id="hst" class="st ${stInfo(p)[0]}">${stInfo(p)[1]}</span></div>${p.descripcion?`<p class="dsc">${esc(p.descripcion)}</p>`:''}${f.length?`<div class="fi"><h3><span>Ficha técnica</span>${f.length>1?`<span class="dots">${f.map((_,i)=>`<button type="button" class="dt ${i?'':'on'}" data-a="fdot" data-i="${i}" aria-label="Ficha ${i+1}"></button>`).join('')}</span>`:''}</h3><div class="fs" data-sw="f" data-i="0" data-u="${esc(JSON.stringify(f))}"><div class="fk"><img class="fm" id="fmi" data-a="zoom" src="${esc(f[0])}" alt="Ficha técnica"></div></div></div>`:''}</div></div>`;
+  return `<div class="hero ${pstate(p)}"><div class="gl"><div class="pho" data-sw="g">${bandHTML(p)}${g[0]?`<img class="mi" id="mi" data-a="zoom" src="${esc(g[0])}" alt="${esc(p.nombre)}">`:ph}${g.length>1?arr('img','Foto')+`<span class="gc" id="gc">1 / ${g.length}</span><div class="gd" id="gd">${g.map((_,i)=>`<i class="${i?'':'on'}"></i>`).join('')}</div>`:''}</div>${g.length>1?`<div class="ths">${g.map((u,i)=>`<img class="${i?'':'on'}" src="${esc(u)}" data-a="gal" data-i="${i}" alt="">`).join('')}</div>`:''}</div><div class="inf"><h1>${esc(p.nombre)}</h1>${p.referencia?`<div class="refh"><b>Ref.</b><span>${esc(p.referencia)}</span></div>`:''}<div class="pr"><b>${money(p.precio)}</b><span id="hst" class="st ${stInfo(p)[0]}">${stInfo(p)[1]}</span></div>${p.descripcion?`<p class="dsc">${esc(p.descripcion)}</p>`:''}${f.length?`<div class="fi"><h3><span>Ficha técnica</span>${f.length>1?`<span class="dots">${f.map((_,i)=>`<button type="button" class="dt ${i?'':'on'}" data-a="fdot" data-i="${i}" aria-label="Ficha ${i+1}"></button>`).join('')}</span>`:''}</h3><div class="fs" data-sw="f" data-i="0" data-u="${esc(JSON.stringify(f))}"><div class="fk"><img class="fm" id="fmi" data-a="zoom" src="${esc(f[0])}" alt="Ficha técnica"></div></div></div>`:''}</div></div>`;
 };
 function hero(){
   const p=prods.find(x=>x.id===sel),h=$('#hero');
@@ -378,10 +389,11 @@ function adminRender(){
   stats();
   const cs=JSON.stringify(cats);
   if(cs!==catSig){catSig=cs;const cur=$('#ac').value;$('#ac').innerHTML='<option value="">Todas las categorías</option>'+cats.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join('');$('#ac').value=cur;aCat=$('#ac').value}
-  $('#af').innerHTML=[['all','Todos'],['low','Stock bajo'],['out','Agotados'],['hid','Ocultos'],['prx','Próximamente']].map(f=>`<button class="chip ${aF===f[0]?'on':''}" data-a="af" data-f="${f[0]}">${f[1]}</button>`).join('');
+  $('#af').innerHTML=[['all','Todos'],['low','Stock bajo'],['out','Agotados'],['hid','Ocultos'],['prx','Próximamente'],['sref','Sin referencia']].map(f=>`<button class="chip ${aF===f[0]?'on':''}" data-a="af" data-f="${f[0]}">${f[1]}</button>`).join('');
   const t=aq.trim().toLowerCase();
-  const l=prods.filter(p=>(!aCat||p.categoria_id===+aCat)&&(!t||p.nombre.toLowerCase().includes(t))&&(aF==='all'||(aF==='low'&&p.stock>0&&p.stock<=LOW)||(aF==='out'&&p.stock<=0)||(aF==='hid'&&!p.activo)||(aF==='prx'&&p.proximamente)));
-  l.sort((a,b)=>(a.activo===b.activo?0:a.activo?-1:1));
+  const l=prods.filter(p=>(!aCat||p.categoria_id===+aCat)&&(!t||(p.nombre+' '+(p.referencia||'')).toLowerCase().includes(t))&&(aF==='all'||(aF==='low'&&p.stock>0&&p.stock<=LOW)||(aF==='out'&&p.stock<=0)||(aF==='hid'&&!p.activo)||(aF==='prx'&&p.proximamente)||(aF==='sref'&&!p.referencia)));
+  const so=$('#as').value,cr=so==='ra'?cmpRef(1):so==='rd'?cmpRef(-1):null;
+  l.sort((a,b)=>(a.activo===b.activo?0:a.activo?-1:1)||(cr?cr(a,b):0));
   if(l.length)sync($('#ag'),l,p=>p.id,acard);else $('#ag').innerHTML='<div class="emp">No hay productos.</div>';
   $('#cl').innerHTML=cats.length?cats.map(c=>`<div class="row"><b>${esc(c.nombre)}</b><span>${prods.filter(p=>p.categoria_id===c.id).length} productos</span><button class="btn dg sm" data-a="delCat" data-id="${c.id}">Eliminar</button></div>`).join(''):'<div class="emp">Sin categorías.</div>';
 }
@@ -389,7 +401,7 @@ function stats(){
   const n=f=>prods.filter(f).length;
   $('#stats').innerHTML=[['Productos',prods.length,''],['Visibles',n(p=>p.activo),''],['Stock bajo',n(p=>p.stock>0&&p.stock<=LOW),'w'],['Agotados',n(p=>p.stock<=0),'d']].map(s=>`<div class="stat ${s[2]}"><b>${s[1]}</b><span>${s[0]}</span></div>`).join('');
 }
-const acard=p=>`<article class="c ac ${pstate(p)}"><div class="th">${thumb(p)}${bandHTML(p)}${bhtml(abadge(p))}</div><div class="tx"><div class="tn">${esc(p.nombre)}</div><div class="tc">${esc(catName(p.categoria_id)||'Sin categoría')}</div><div class="tp">${money(p.precio)}</div><div class="ar"><span class="tc">Stock</span><span><button class="mn" data-a="stk" data-id="${p.id}" data-d="-1">-</button> <span class="n">${p.stock}</span> <button class="mn" data-a="stk" data-id="${p.id}" data-d="1">+</button></span></div><div class="ca"><button class="btn gh sm" data-a="edit" data-id="${p.id}">Editar</button><button class="btn dg sm" data-a="del" data-id="${p.id}">Eliminar</button></div></div></article>`;
+const acard=p=>`<article class="c ac ${pstate(p)}"><div class="th">${thumb(p)}${bandHTML(p)}${bhtml(abadge(p))}</div><div class="tx"><div class="tn">${esc(p.nombre)}</div>${refLine(p)}<div class="tc">${esc(catName(p.categoria_id)||'Sin categoría')}</div><div class="tp">${money(p.precio)}</div><div class="ar"><span class="tc">Stock</span><span><button class="mn" data-a="stk" data-id="${p.id}" data-d="-1">-</button> <span class="n">${p.stock}</span> <button class="mn" data-a="stk" data-id="${p.id}" data-d="1">+</button></span></div><div class="ca"><button class="btn gh sm" data-a="edit" data-id="${p.id}">Editar</button><button class="btn dg sm" data-a="del" data-id="${p.id}">Eliminar</button></div></div></article>`;
 /* cambiar stock sin recargar nada: se parchea solo el numero */
 function applyStock(p,n){
   p.stock=n;
@@ -421,7 +433,7 @@ function openDrawer(p){
   $('#pc').innerHTML='<option value="">Sin categoría</option>'+cats.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
   $('#pdel').classList.toggle('hidden',!p);
   if(p){$('#pn').value=p.nombre;$('#pc').value=p.categoria_id??'';$('#pe').value=(p.etiquetas||[]).join(', ');$('#pp').value=p.precio;$('#ps').value=p.stock;$('#pd').value=p.descripcion||'';$('#pa').checked=p.activo}
-  cv={x:p?.portada_x??50,y:p?.portada_y??50};$('#pxm').checked=!!(p&&p.proximamente);$('#extn').classList.toggle('hidden',hasExt());
+  cv={x:p?.portada_x??50,y:p?.portada_y??50};$('#pxm').checked=!!(p&&p.proximamente);$('#extn').classList.toggle('hidden',hasExt());$('#prf').value=p?.referencia||'';$('#extr').classList.toggle('hidden',hasRef());
   pm.g=p?pics(p).map(u=>({u})):[];pm.f=p?fpics(p).map(u=>({u})):[];pmRender('g');pmRender('f');
   $('#dw').classList.remove('hidden');
 }
@@ -441,12 +453,12 @@ $('#pf').addEventListener('submit',async e=>{
   e.preventDefault();const b=$('#psv');b.disabled=true;b.textContent='Guardando...';
   try{
     const fotos=await Promise.all(pm.g.map(i=>upl(i,1600,.85))),ff=await Promise.all(pm.f.map(i=>upl(i,2200,.9)));
-    const row={nombre:$('#pn').value.trim(),categoria_id:$('#pc').value?+$('#pc').value:null,etiquetas:[...new Set($('#pe').value.split(',').map(t=>t.trim().toLowerCase()).filter(Boolean))],precio:+$('#pp').value||0,stock:parseInt($('#ps').value,10)||0,descripcion:$('#pd').value.trim()||null,fotos,ficha_fotos:ff,foto_url:fotos[0]||null,activo:$('#pa').checked,...(hasExt()?{proximamente:$('#pxm').checked,portada_x:cv.x,portada_y:cv.y}:{})};
+    const row={nombre:$('#pn').value.trim(),categoria_id:$('#pc').value?+$('#pc').value:null,etiquetas:[...new Set($('#pe').value.split(',').map(t=>t.trim().toLowerCase()).filter(Boolean))],precio:+$('#pp').value||0,stock:parseInt($('#ps').value,10)||0,descripcion:$('#pd').value.trim()||null,fotos,ficha_fotos:ff,foto_url:fotos[0]||null,activo:$('#pa').checked,...(hasExt()?{proximamente:$('#pxm').checked,portada_x:cv.x,portada_y:cv.y}:{}),...(hasRef()?{referencia:$('#prf').value.trim()||null}:{})};
     const r=editing?await sb.from('productos').update(row).eq('id',editing.id).select().single():await sb.from('productos').insert(row).select().single();
     if(r.error)throw r.error;
     rmFotos(rem);const i=prods.findIndex(x=>x.id===r.data.id);if(i<0)prods.unshift(r.data);else prods[i]=r.data;
     $('#dw').classList.add('hidden');toast('Producto guardado');render();adminRender();
-  }catch(err){toast(/proximamente|portada_/.test(err.message||'')?'Falta ejecutar migracion_estado.sql en Supabase':(err.message||'Error al guardar'),1)}finally{b.disabled=false;b.textContent='Guardar'}
+  }catch(err){toast(/referencia/.test(err.message||'')?'Falta ejecutar migracion_referencia_1.sql en Supabase':/proximamente|portada_/.test(err.message||'')?'Falta ejecutar migracion_estado.sql en Supabase':(err.message||'Error al guardar'),1)}finally{b.disabled=false;b.textContent='Guardar'}
 });
 async function delProd(id){
   const p=prods.find(x=>x.id===id);if(!p||!confirm(`Eliminar "${p.nombre}"?`))return;
@@ -480,25 +492,26 @@ async function readExcel(file){
     const I={ref:ix('ref'),nom:ix('nom'),cat:ix('cat'),stock:ix('stock'),precio:ix('precio')};
     rows.slice(hi+1).forEach(r=>{
       const g=i=>i<0?'':String(r[i]??'').trim(),nom=g(I.nom),ref=g(I.ref);if(!nom&&!ref)return;
-      const nombre=!ref||norm(nom).includes(norm(ref))?nom:(nom+' '+ref).trim();
-      map.set(norm(nombre),{nombre,cat:g(I.cat),stock:Math.max(0,toNum(r[I.stock])),precio:Math.max(0,toNum(r[I.precio]))});
+      const nombre=nom||ref;
+      map.set(norm(ref||nombre),{referencia:ref,nombre,cat:g(I.cat),stock:Math.max(0,toNum(r[I.stock])),precio:Math.max(0,toNum(r[I.precio]))});
     });
   });
   if(!found)throw new Error('No encontré la columna NOMBRE. Las columnas esperadas son: REFERENCIA, NOMBRE, CATEGORIA, STOCK, PRECIO.');
   return [...map.values()];
 }
-const findProd=r=>prods.find(p=>norm(p.nombre)===norm(r.nombre));
+/* se identifica por referencia; si el producto antiguo aun trae la referencia pegada al nombre, tambien lo reconoce */
+const findProd=r=>prods.find(p=>r.referencia?(norm(p.referencia)===norm(r.referencia)||norm(p.nombre)===norm(r.nombre+' '+r.referencia)):norm(p.nombre)===norm(r.nombre));
 function impPreview(){
   const nu=impRows.filter(r=>!findProd(r)).length,up=impRows.length-nu;
   const nc=new Set(impRows.map(r=>r.cat).filter(c=>c&&!cats.find(x=>norm(x.nombre)===norm(c))).map(norm)).size;
-  $('#imb').innerHTML=`<p class="imh">Los productos nuevos se crean <b>ocultos</b> y sin fotos. Cuando les subas fotos los activas desde “Editar”.</p>
+  $('#imb').innerHTML=`<p class="imh">Los productos nuevos se crean <b>ocultos</b> y sin fotos; la referencia se guarda en su propio campo. Cuando les subas fotos los activas desde “Editar”.</p>
   <div class="imps"><span>${nu} nuevos</span><span>${up} a actualizar</span>${nc?`<span>${nc} categorías nuevas</span>`:''}</div>
-  <div class="impl"><table><thead><tr><th>Producto</th><th>Categoría</th><th>Stock</th><th>Precio</th><th></th></tr></thead><tbody>${impRows.map(r=>{const e=findProd(r);return `<tr><td>${esc(r.nombre)}</td><td>${esc(r.cat||'—')}</td><td>${r.stock}</td><td>${money(r.precio)}</td><td class="${e?'up':'nw'}">${e?'Actualizar':'Nuevo'}</td></tr>`}).join('')}</tbody></table></div>
+  <div class="impl"><table><thead><tr><th>Ref.</th><th>Producto</th><th>Categoría</th><th>Stock</th><th>Precio</th><th></th></tr></thead><tbody>${impRows.map(r=>{const e=findProd(r);return `<tr><td>${esc(r.referencia||'—')}</td><td>${esc(r.nombre)}</td><td>${esc(r.cat||'—')}</td><td>${r.stock}</td><td>${money(r.precio)}</td><td class="${e?'up':'nw'}">${e?'Actualizar':'Nuevo'}</td></tr>`}).join('')}</tbody></table></div>
   <div class="acts" style="margin-top:6px"><button class="btn" id="imgo" data-a="doImport">Importar ${impRows.length} productos</button><button class="btn gh" data-a="closeImp">Cancelar</button></div>`;
 }
 $('#xf').addEventListener('change',async e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
-  try{toast('Leyendo Excel...');impRows=await readExcel(f);if(!impRows.length)throw new Error('El archivo no tiene filas con productos.');impPreview();$('#im').classList.remove('hidden')}
+  try{if(!hasRef())throw new Error('Falta ejecutar migracion_referencia_1.sql en Supabase (SQL Editor).');toast('Leyendo Excel...');impRows=await readExcel(f);if(!impRows.length)throw new Error('El archivo no tiene filas con productos.');impPreview();$('#im').classList.remove('hidden')}
   catch(err){toast(err.message||'No se pudo leer el archivo',1)}
 });
 async function doImport(){
@@ -508,7 +521,8 @@ async function doImport(){
     if(miss.length){const r=await sb.from('categorias').insert(miss.map((n,i)=>({nombre:n,orden:cats.length+i+1}))).select();if(r.error)throw r.error;cats.push(...r.data)}
     const cid=n=>n?((cats.find(x=>norm(x.nombre)===norm(n))||{}).id??null):null,nuevos=[],upd=[];
     impRows.forEach(r=>{const base={categoria_id:cid(r.cat),precio:r.precio,stock:r.stock},ex=findProd(r);
-      ex?upd.push([ex.id,base]):nuevos.push({nombre:r.nombre,...base,etiquetas:[],descripcion:null,fotos:[],ficha_fotos:[],foto_url:null,activo:false})});
+      if(ex){if(r.referencia&&!ex.referencia){base.referencia=r.referencia;if(norm(ex.nombre)===norm(r.nombre+' '+r.referencia))base.nombre=r.nombre}upd.push([ex.id,base])}
+      else nuevos.push({nombre:r.nombre,referencia:r.referencia||null,...base,etiquetas:[],descripcion:null,fotos:[],ficha_fotos:[],foto_url:null,activo:false})});
     if(nuevos.length){const r=await sb.from('productos').insert(nuevos).select();if(r.error)throw r.error;prods.unshift(...r.data)}
     const rs=await Promise.all(upd.map(([id,v])=>sb.from('productos').update(v).eq('id',id).select().single()));
     rs.forEach(r=>{if(r.error)throw r.error;const i=prods.findIndex(x=>x.id===r.data.id);if(i>=0)prods[i]=r.data});
@@ -552,6 +566,7 @@ document.addEventListener('touchend',e=>{if(!tx)return;const dx=e.changedTouches
 $('#q').addEventListener('input',e=>{q=e.target.value;render()});
 $('#sort').addEventListener('change',e=>{sort=e.target.value;render()});
 $('#aq').addEventListener('input',e=>{aq=e.target.value;adminRender()});
+$('#as').addEventListener('change',adminRender);
 $('#ac').addEventListener('change',e=>{aCat=e.target.value;adminRender()});
 $('#cn').addEventListener('keydown',e=>{if(e.key==='Enter')addCat()});
 document.addEventListener('keydown',e=>{if(!$('#lb').classList.contains('hidden')&&(e.key==='ArrowRight'||e.key==='ArrowLeft')){lbShow(lbI+(e.key==='ArrowRight'?1:-1));return}
