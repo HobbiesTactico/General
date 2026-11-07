@@ -169,6 +169,12 @@ body.pv .bk{display:inline-flex;align-items:center;gap:4px;margin-bottom:10px}
 .rf b{color:var(--gold);font-weight:800;margin-right:5px}
 .refh{font-size:1.25rem;margin:-2px 0 0;color:var(--mut)}.refh b{color:var(--gold);font-weight:800;margin-right:8px}.refh span{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--ink)}
 @media(max-width:860px){#grid .rf{font-size:.82rem}.refh{font-size:1.1rem}}
+/* rebajas: precio original tachado arriba, precio rebajado abajo */
+.tp.sale{display:flex;flex-direction:column;gap:2px}
+.pold{display:flex;align-items:center;gap:6px;font:500 .78rem 'JetBrains Mono',monospace;color:var(--mut)}.pold s{text-decoration-thickness:1.5px}
+.pold i{font-style:normal;font-weight:800;font-size:.68rem;color:#fff;background:var(--bad);padding:1px 6px;border-radius:99px}
+.pw{display:flex;flex-direction:column;gap:2px}.pw .pold{font-size:1rem}.pw .pold i{font-size:.8rem;padding:2px 8px}
+.poh{font-size:.78rem;color:var(--mut);margin-top:4px;min-height:1.1em}.poh.bad{color:var(--bad)}.poh.ok{color:var(--ok)}
 </style></head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="igg" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#FEDA75"/><stop offset=".25" stop-color="#FA7E1E"/><stop offset=".5" stop-color="#D62976"/><stop offset=".75" stop-color="#962FBF"/><stop offset="1" stop-color="#4F5BD5"/></linearGradient></defs></svg>
@@ -228,6 +234,7 @@ body.pv .bk{display:inline-flex;align-items:center;gap:4px;margin-bottom:10px}
     <div class="s2"><label>Etiquetas (separadas por coma)</label><input id="pe" type="text" placeholder="nuevo, oferta"></div>
     <div><label>Precio (COP)</label><input id="pp" type="number" min="0" step="1" required></div>
     <div><label>Stock</label><div class="stp"><button type="button" data-a="sd" data-d="-1">-</button><input id="ps" type="number" min="0" value="0"><button type="button" data-a="sd" data-d="1">+</button></div></div>
+    <div class="s2"><label>Precio rebajado (opcional)</label><input id="po" type="number" min="0" step="1" placeholder="Vacío = sin rebaja"><div id="poh" class="poh"></div></div>
     <div class="s2"><label>Descripción corta</label><textarea id="pd" rows="2"></textarea></div>
     <div class="s2"><label>Fotos del producto (la primera es la portada)</label><div id="pg" class="pm"></div></div>
     <div class="s2"><label>Fotos de la ficha técnica</label><div id="pfc" class="pm"></div></div>
@@ -235,6 +242,7 @@ body.pv .bk{display:inline-flex;align-items:center;gap:4px;margin-bottom:10px}
     <div class="s2"><label class="sw2"><input id="pxm" type="checkbox"> Marcar como “Próximamente” (cartel sobre la foto)</label></div>
     <div class="s2"><label>Encuadre de la portada (arrastra la foto)</label><div class="cvw"><div id="cvf" class="cvf no">Agrega una foto para encuadrar la portada</div><div class="cvh"><span>Así se recorta en la cuadrícula del catálogo.</span><button type="button" class="btn gh sm" data-a="cvreset">Centrar</button></div></div></div>
     <div id="extr" class="s2 imh hidden" style="color:var(--bad)">Para guardar la “Referencia” ejecuta migracion_referencia_1.sql en Supabase (SQL Editor).</div>
+    <div id="exto" class="s2 imh hidden" style="color:var(--bad)">Para usar rebajas ejecuta migracion_rebajas.sql en Supabase (SQL Editor).</div>
     <div id="extn" class="s2 imh hidden" style="color:var(--bad)">Para usar “Próximamente” y el encuadre, ejecuta migracion_estado.sql en Supabase (SQL Editor).</div>
   </div>
   <div class="acts"><button class="btn" id="psv">Guardar</button><button type="button" class="btn gh" data-a="closeDrawer">Cancelar</button><button type="button" class="btn dg hidden" id="pdel" data-a="delEdit" style="margin-left:auto">Eliminar</button></div>
@@ -245,7 +253,7 @@ body.pv .bk{display:inline-flex;align-items:center;gap:4px;margin-bottom:10px}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===== CONFIGURACION ===== */
-const SUPABASE_URL='https://ehafdkivtqvytqjzvqyr.supabase.co',SUPABASE_KEY='sb_publishable_K6hbJKOT_8wjIi6vfYBKWQ_JRrKORHl ',LOGIN_DOMAIN='ht.local',WA='573188611317',BUCKET='productos',LOW=3;
+const SUPABASE_URL='https://ehafdkivtqvytqjzvqyr.supabase.co',SUPABASE_KEY='sb_publishable_K6hbJKOT_8wjIi6vfYBKWQ_JRrKORHl',LOGIN_DOMAIN='ht.local',WA='573188611317',BUCKET='productos',LOW=3;
 /* ========================= */
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
@@ -300,17 +308,23 @@ const stInfo=p=>p.proximamente?['px','Próximamente']:p.stock>0?['ok',`Disponibl
 function setBand(card,p){const th=card.querySelector('.th'),e=th.querySelector('.bn');if(e)e.remove();card.classList.remove('prx','out');const k=pstate(p);if(k){card.classList.add(k);th.insertAdjacentHTML('beforeend',bandHTML(p))}}
 const hasExt=()=>!prods.length||('proximamente' in prods[0]);
 const hasRef=()=>!prods.length||('referencia' in prods[0]);
+const hasOf=()=>!prods.length||('precio_oferta' in prods[0]);
+const onSale=p=>p.precio_oferta!=null&&+p.precio_oferta>0&&+p.precio_oferta<+p.precio;
+const efPrice=p=>onSale(p)?+p.precio_oferta:+p.precio;
+const oldLine=p=>`<span class="pold"><s>${money(p.precio)}</s><i>-${Math.round((1-p.precio_oferta/p.precio)*100)}%</i></span>`;
+const priceTile=p=>onSale(p)?`<div class="tp sale">${oldLine(p)}<span>${money(p.precio_oferta)}</span></div>`:`<div class="tp">${money(p.precio)}</div>`;
+const priceHero=p=>onSale(p)?`<div class="pw">${oldLine(p)}<b>${money(p.precio_oferta)}</b></div>`:`<b>${money(p.precio)}</b>`;
 const refLine=p=>`<div class="rf">${p.referencia?`<b>Ref.</b>${esc(p.referencia)}`:''}</div>`;
 const refNum=p=>{const m=String(p.referencia||'').match(/(\d+)(?!.*\d)/);return m?+m[1]:null};
 const cmpRef=d=>(a,b)=>{const x=refNum(a),y=refNum(b);if(x===y)return 0;if(x==null)return 1;if(y==null)return -1;return d*(x-y)};
 const abadge=p=>!p.activo?['bd h','Oculto']:p.stock>0&&p.stock<=LOW?['bd l','Stock bajo']:null;
 const bhtml=b=>b?`<span class="${b[0]}">${b[1]}</span>`:'';
 const thumb=p=>pics(p)[0]?`<img src="${esc(pics(p)[0])}" alt="" loading="lazy" style="object-position:${p.portada_x??50}% ${p.portada_y??50}%">`:ph;
-const pcard=p=>`<article class="c ${pstate(p)}" data-a="pick" data-id="${p.id}"><div class="th">${thumb(p)}${bandHTML(p)}${bhtml(pbadge(p))}</div><div class="tx"><div class="tn">${esc(p.nombre)}</div>${refLine(p)}<div class="tp">${money(p.precio)}</div></div></article>`;
+const pcard=p=>`<article class="c ${pstate(p)}" data-a="pick" data-id="${p.id}"><div class="th">${thumb(p)}${bandHTML(p)}${bhtml(pbadge(p))}</div><div class="tx"><div class="tn">${esc(p.nombre)}</div>${refLine(p)}${priceTile(p)}</div></article>`;
 function items(){
   const t=q.trim().toLowerCase();
   const l=prods.filter(p=>p.activo&&(fCat===null||p.categoria_id===fCat)&&[...fTags].every(x=>(p.etiquetas||[]).includes(x))&&(!t||(p.nombre+' '+(p.referencia||'')+' '+(p.descripcion||'')+' '+(p.etiquetas||[]).join(' ')).toLowerCase().includes(t)));
-  if(sort==='pa')l.sort((a,b)=>a.precio-b.precio);if(sort==='pd')l.sort((a,b)=>b.precio-a.precio);return l;
+  if(sort==='pa')l.sort((a,b)=>efPrice(a)-efPrice(b));if(sort==='pd')l.sort((a,b)=>efPrice(b)-efPrice(a));return l;
 }
 function render(){
   const vis=prods.filter(p=>p.activo),used=new Set(vis.map(p=>p.categoria_id)),sl=$('#cats').scrollLeft;
@@ -330,7 +344,7 @@ let nextDir=null,heroTok=0;
 const heroHTML=p=>{
   const g=pics(p),f=fpics(p);
   const arr=(a,t)=>`<button class="nv l" data-a="${a}" data-d="-1" aria-label="${t} anterior">${CH.l}</button><button class="nv r" data-a="${a}" data-d="1" aria-label="${t} siguiente">${CH.r}</button>`;
-  return `<div class="hero ${pstate(p)}"><div class="gl"><div class="pho" data-sw="g">${bandHTML(p)}${g[0]?`<img class="mi" id="mi" data-a="zoom" src="${esc(g[0])}" alt="${esc(p.nombre)}">`:ph}${g.length>1?arr('img','Foto')+`<span class="gc" id="gc">1 / ${g.length}</span><div class="gd" id="gd">${g.map((_,i)=>`<i class="${i?'':'on'}"></i>`).join('')}</div>`:''}</div>${g.length>1?`<div class="ths">${g.map((u,i)=>`<img class="${i?'':'on'}" src="${esc(u)}" data-a="gal" data-i="${i}" alt="">`).join('')}</div>`:''}</div><div class="inf"><h1>${esc(p.nombre)}</h1>${p.referencia?`<div class="refh"><b>Ref.</b><span>${esc(p.referencia)}</span></div>`:''}<div class="pr"><b>${money(p.precio)}</b><span id="hst" class="st ${stInfo(p)[0]}">${stInfo(p)[1]}</span></div>${p.descripcion?`<p class="dsc">${esc(p.descripcion)}</p>`:''}${f.length?`<div class="fi"><h3><span>Ficha técnica</span>${f.length>1?`<span class="dots">${f.map((_,i)=>`<button type="button" class="dt ${i?'':'on'}" data-a="fdot" data-i="${i}" aria-label="Ficha ${i+1}"></button>`).join('')}</span>`:''}</h3><div class="fs" data-sw="f" data-i="0" data-u="${esc(JSON.stringify(f))}"><div class="fk"><img class="fm" id="fmi" data-a="zoom" src="${esc(f[0])}" alt="Ficha técnica"></div></div></div>`:''}</div></div>`;
+  return `<div class="hero ${pstate(p)}"><div class="gl"><div class="pho" data-sw="g">${bandHTML(p)}${g[0]?`<img class="mi" id="mi" data-a="zoom" src="${esc(g[0])}" alt="${esc(p.nombre)}">`:ph}${g.length>1?arr('img','Foto')+`<span class="gc" id="gc">1 / ${g.length}</span><div class="gd" id="gd">${g.map((_,i)=>`<i class="${i?'':'on'}"></i>`).join('')}</div>`:''}</div>${g.length>1?`<div class="ths">${g.map((u,i)=>`<img class="${i?'':'on'}" src="${esc(u)}" data-a="gal" data-i="${i}" alt="">`).join('')}</div>`:''}</div><div class="inf"><h1>${esc(p.nombre)}</h1>${p.referencia?`<div class="refh"><b>Ref.</b><span>${esc(p.referencia)}</span></div>`:''}<div class="pr">${priceHero(p)}<span id="hst" class="st ${stInfo(p)[0]}">${stInfo(p)[1]}</span></div>${p.descripcion?`<p class="dsc">${esc(p.descripcion)}</p>`:''}${f.length?`<div class="fi"><h3><span>Ficha técnica</span>${f.length>1?`<span class="dots">${f.map((_,i)=>`<button type="button" class="dt ${i?'':'on'}" data-a="fdot" data-i="${i}" aria-label="Ficha ${i+1}"></button>`).join('')}</span>`:''}</h3><div class="fs" data-sw="f" data-i="0" data-u="${esc(JSON.stringify(f))}"><div class="fk"><img class="fm" id="fmi" data-a="zoom" src="${esc(f[0])}" alt="Ficha técnica"></div></div></div>`:''}</div></div>`;
 };
 function hero(){
   const p=prods.find(x=>x.id===sel),h=$('#hero');
@@ -389,9 +403,9 @@ function adminRender(){
   stats();
   const cs=JSON.stringify(cats);
   if(cs!==catSig){catSig=cs;const cur=$('#ac').value;$('#ac').innerHTML='<option value="">Todas las categorías</option>'+cats.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join('');$('#ac').value=cur;aCat=$('#ac').value}
-  $('#af').innerHTML=[['all','Todos'],['low','Stock bajo'],['out','Agotados'],['hid','Ocultos'],['prx','Próximamente'],['sref','Sin referencia']].map(f=>`<button class="chip ${aF===f[0]?'on':''}" data-a="af" data-f="${f[0]}">${f[1]}</button>`).join('');
+  $('#af').innerHTML=[['all','Todos'],['low','Stock bajo'],['out','Agotados'],['hid','Ocultos'],['prx','Próximamente'],['sref','Sin referencia'],['reb','En rebaja']].map(f=>`<button class="chip ${aF===f[0]?'on':''}" data-a="af" data-f="${f[0]}">${f[1]}</button>`).join('');
   const t=aq.trim().toLowerCase();
-  const l=prods.filter(p=>(!aCat||p.categoria_id===+aCat)&&(!t||(p.nombre+' '+(p.referencia||'')).toLowerCase().includes(t))&&(aF==='all'||(aF==='low'&&p.stock>0&&p.stock<=LOW)||(aF==='out'&&p.stock<=0)||(aF==='hid'&&!p.activo)||(aF==='prx'&&p.proximamente)||(aF==='sref'&&!p.referencia)));
+  const l=prods.filter(p=>(!aCat||p.categoria_id===+aCat)&&(!t||(p.nombre+' '+(p.referencia||'')).toLowerCase().includes(t))&&(aF==='all'||(aF==='low'&&p.stock>0&&p.stock<=LOW)||(aF==='out'&&p.stock<=0)||(aF==='hid'&&!p.activo)||(aF==='prx'&&p.proximamente)||(aF==='sref'&&!p.referencia)||(aF==='reb'&&onSale(p))));
   const so=$('#as').value,cr=so==='ra'?cmpRef(1):so==='rd'?cmpRef(-1):null;
   l.sort((a,b)=>(a.activo===b.activo?0:a.activo?-1:1)||(cr?cr(a,b):0));
   if(l.length)sync($('#ag'),l,p=>p.id,acard);else $('#ag').innerHTML='<div class="emp">No hay productos.</div>';
@@ -401,7 +415,7 @@ function stats(){
   const n=f=>prods.filter(f).length;
   $('#stats').innerHTML=[['Productos',prods.length,''],['Visibles',n(p=>p.activo),''],['Stock bajo',n(p=>p.stock>0&&p.stock<=LOW),'w'],['Agotados',n(p=>p.stock<=0),'d']].map(s=>`<div class="stat ${s[2]}"><b>${s[1]}</b><span>${s[0]}</span></div>`).join('');
 }
-const acard=p=>`<article class="c ac ${pstate(p)}"><div class="th">${thumb(p)}${bandHTML(p)}${bhtml(abadge(p))}</div><div class="tx"><div class="tn">${esc(p.nombre)}</div>${refLine(p)}<div class="tc">${esc(catName(p.categoria_id)||'Sin categoría')}</div><div class="tp">${money(p.precio)}</div><div class="ar"><span class="tc">Stock</span><span><button class="mn" data-a="stk" data-id="${p.id}" data-d="-1">-</button> <span class="n">${p.stock}</span> <button class="mn" data-a="stk" data-id="${p.id}" data-d="1">+</button></span></div><div class="ca"><button class="btn gh sm" data-a="edit" data-id="${p.id}">Editar</button><button class="btn dg sm" data-a="del" data-id="${p.id}">Eliminar</button></div></div></article>`;
+const acard=p=>`<article class="c ac ${pstate(p)}"><div class="th">${thumb(p)}${bandHTML(p)}${bhtml(abadge(p))}</div><div class="tx"><div class="tn">${esc(p.nombre)}</div>${refLine(p)}<div class="tc">${esc(catName(p.categoria_id)||'Sin categoría')}</div>${priceTile(p)}<div class="ar"><span class="tc">Stock</span><span><button class="mn" data-a="stk" data-id="${p.id}" data-d="-1">-</button> <span class="n">${p.stock}</span> <button class="mn" data-a="stk" data-id="${p.id}" data-d="1">+</button></span></div><div class="ca"><button class="btn gh sm" data-a="edit" data-id="${p.id}">Editar</button><button class="btn dg sm" data-a="del" data-id="${p.id}">Eliminar</button></div></div></article>`;
 /* cambiar stock sin recargar nada: se parchea solo el numero */
 function applyStock(p,n){
   p.stock=n;
@@ -433,7 +447,7 @@ function openDrawer(p){
   $('#pc').innerHTML='<option value="">Sin categoría</option>'+cats.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
   $('#pdel').classList.toggle('hidden',!p);
   if(p){$('#pn').value=p.nombre;$('#pc').value=p.categoria_id??'';$('#pe').value=(p.etiquetas||[]).join(', ');$('#pp').value=p.precio;$('#ps').value=p.stock;$('#pd').value=p.descripcion||'';$('#pa').checked=p.activo}
-  cv={x:p?.portada_x??50,y:p?.portada_y??50};$('#pxm').checked=!!(p&&p.proximamente);$('#extn').classList.toggle('hidden',hasExt());$('#prf').value=p?.referencia||'';$('#extr').classList.toggle('hidden',hasRef());
+  cv={x:p?.portada_x??50,y:p?.portada_y??50};$('#pxm').checked=!!(p&&p.proximamente);$('#extn').classList.toggle('hidden',hasExt());$('#prf').value=p?.referencia||'';$('#extr').classList.toggle('hidden',hasRef());$('#po').value=p?.precio_oferta??'';$('#exto').classList.toggle('hidden',hasOf());poHint();
   pm.g=p?pics(p).map(u=>({u})):[];pm.f=p?fpics(p).map(u=>({u})):[];pmRender('g');pmRender('f');
   $('#dw').classList.remove('hidden');
 }
@@ -449,16 +463,19 @@ async function upl(it,max,q){
 }
 const fotoPath=u=>{const k='/object/public/'+BUCKET+'/',i=u?u.indexOf(k):-1;return i<0?null:decodeURIComponent(u.slice(i+k.length))};
 const rmFotos=u=>{const ps=[...new Set(u.map(fotoPath).filter(Boolean))];if(ps.length)sb.storage.from(BUCKET).remove(ps)};
+function poHint(){const h=$('#poh'),pr=+$('#pp').value||0,o=$('#po').value.trim();h.className='poh';if(!o){h.textContent='';return}const v=+o;if(!(v>0)||v>=pr){h.textContent='Debe ser menor al precio normal.';h.classList.add('bad');return}h.textContent=`-${Math.round((1-v/pr)*100)}% (ahorra ${money(pr-v)})`;h.classList.add('ok')}
+$('#po').addEventListener('input',poHint);$('#pp').addEventListener('input',poHint);
 $('#pf').addEventListener('submit',async e=>{
   e.preventDefault();const b=$('#psv');b.disabled=true;b.textContent='Guardando...';
   try{
+    const po=$('#po').value.trim();if(po&&!(+po>0&&+po<(+$('#pp').value||0)))throw new Error('El precio rebajado debe ser menor al precio normal');if(po&&!hasOf())throw new Error('Falta ejecutar migracion_rebajas.sql en Supabase');
     const fotos=await Promise.all(pm.g.map(i=>upl(i,1600,.85))),ff=await Promise.all(pm.f.map(i=>upl(i,2200,.9)));
-    const row={nombre:$('#pn').value.trim(),categoria_id:$('#pc').value?+$('#pc').value:null,etiquetas:[...new Set($('#pe').value.split(',').map(t=>t.trim().toLowerCase()).filter(Boolean))],precio:+$('#pp').value||0,stock:parseInt($('#ps').value,10)||0,descripcion:$('#pd').value.trim()||null,fotos,ficha_fotos:ff,foto_url:fotos[0]||null,activo:$('#pa').checked,...(hasExt()?{proximamente:$('#pxm').checked,portada_x:cv.x,portada_y:cv.y}:{}),...(hasRef()?{referencia:$('#prf').value.trim()||null}:{})};
+    const row={nombre:$('#pn').value.trim(),categoria_id:$('#pc').value?+$('#pc').value:null,etiquetas:[...new Set($('#pe').value.split(',').map(t=>t.trim().toLowerCase()).filter(Boolean))],precio:+$('#pp').value||0,stock:parseInt($('#ps').value,10)||0,descripcion:$('#pd').value.trim()||null,fotos,ficha_fotos:ff,foto_url:fotos[0]||null,activo:$('#pa').checked,...(hasExt()?{proximamente:$('#pxm').checked,portada_x:cv.x,portada_y:cv.y}:{}),...(hasRef()?{referencia:$('#prf').value.trim()||null}:{}),...(hasOf()?{precio_oferta:po?+po:null}:{})};
     const r=editing?await sb.from('productos').update(row).eq('id',editing.id).select().single():await sb.from('productos').insert(row).select().single();
     if(r.error)throw r.error;
     rmFotos(rem);const i=prods.findIndex(x=>x.id===r.data.id);if(i<0)prods.unshift(r.data);else prods[i]=r.data;
     $('#dw').classList.add('hidden');toast('Producto guardado');render();adminRender();
-  }catch(err){toast(/referencia/.test(err.message||'')?'Falta ejecutar migracion_referencia_1.sql en Supabase':/proximamente|portada_/.test(err.message||'')?'Falta ejecutar migracion_estado.sql en Supabase':(err.message||'Error al guardar'),1)}finally{b.disabled=false;b.textContent='Guardar'}
+  }catch(err){toast(/precio_oferta/.test(err.message||'')?'Falta ejecutar migracion_rebajas.sql en Supabase':/referencia/.test(err.message||'')?'Falta ejecutar migracion_referencia_1.sql en Supabase':/proximamente|portada_/.test(err.message||'')?'Falta ejecutar migracion_estado.sql en Supabase':(err.message||'Error al guardar'),1)}finally{b.disabled=false;b.textContent='Guardar'}
 });
 async function delProd(id){
   const p=prods.find(x=>x.id===id);if(!p||!confirm(`Eliminar "${p.nombre}"?`))return;
